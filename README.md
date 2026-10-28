@@ -111,3 +111,4 @@ PostgreSQL слушает только `127.0.0.1:54329`; системная с�
 
 Архитектура: [docs/architecture.md](docs/architecture.md).
 Сервер, HTTPS, обновление и резервные копии: [deploy/README.md](deploy/README.md).
+Подробное руководство для команды и схема БД: [docs/defense/guide.md](docs/defense/guide.md).
