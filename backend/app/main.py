@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
 from typing import Annotated
+from collections import OrderedDict, deque
+from time import monotonic
 from fastapi import FastAPI, Depends, Request, HTTPException, APIRouter
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -16,8 +18,26 @@ app = FastAPI(title='Гильдия искателей', version='1.0.0', descri
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, session_cookie='guild_session',
                    max_age=86400, same_site='lax', https_only=settings.secure_cookie)
 
+# One Uvicorn process: bound in-memory buckets protect expensive password hashing.
+# Caddy supplies the real client address through trusted proxy headers.
+auth_attempts = OrderedDict()
+
 @app.middleware('http')
 async def protect(request: Request, call_next):
+    if request.method == 'POST' and request.url.path in ('/api/auth/login', '/api/auth/register'):
+        key = (request.client.host if request.client else 'unknown', request.url.path)
+        moment = monotonic()
+        bucket = auth_attempts.setdefault(key, deque())
+        auth_attempts.move_to_end(key)
+        while bucket and bucket[0] <= moment - 60:
+            bucket.popleft()
+        limit = 5 if request.url.path.endswith('/register') else 12
+        if len(bucket) >= limit:
+            return JSONResponse({'detail': 'Слишком много попыток входа или регистрации. Подождите минуту.'},
+                                status_code=429, headers={'Retry-After': '60'})
+        bucket.append(moment)
+        if len(auth_attempts) > 10000:
+            auth_attempts.popitem(last=False)
     if request.method not in ('GET', 'HEAD', 'OPTIONS'):
         origin = request.headers.get('origin')
         if origin and origin != settings.public_origin:

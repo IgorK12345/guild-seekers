@@ -100,7 +100,7 @@ def test_five_star_cap_and_cross_item_isolation(player):
 
 def test_foreign_inventory_protected(player):
     eid=player.get('/api/inventory').json()[0]['id']
-    with TestClient(app) as other:
+    with TestClient(app,base_url='https://testserver') as other:
         other.post('/api/auth/register',json={'username':'other','password':'longpassword','name':'Другой'})
         for endpoint in ['equip','unequip','merge']:
             assert other.post(f'/api/inventory/{eid}/{endpoint}',json={}).status_code==404
@@ -193,7 +193,7 @@ def test_boss_counterattack_and_retry(player):
     assert player.get('/api/boss').json()['hp']==4994
 
 def test_parallel_boss_no_lost_damage(player):
-    with TestClient(app) as other:
+    with TestClient(app,base_url='https://testserver') as other:
         other.post('/api/auth/register',json={'username':'other','password':'longpassword','name':'Другой'})
         with ThreadPoolExecutor(max_workers=2) as pool:
             results=[f.result() for f in [pool.submit(c.post,'/api/boss/attack',json={'request_id':str(uuid4())}) for c in [player,other]]]
@@ -238,7 +238,7 @@ def test_chat_security_and_validation(player):
 
 def test_progress_survives_new_session(player):
     fight(player)
-    with TestClient(app) as fresh:
+    with TestClient(app,base_url='https://testserver') as fresh:
         fresh.post('/api/auth/login',json={'username':'tester','password':'testpassword123'})
         h=fresh.get('/api/character').json();assert h['xp']==30 and h['hp']==42
         assert len(fresh.get('/api/battles').json())==1
@@ -281,3 +281,11 @@ def test_next_location_item_matches_previous_two_stars(player):
         for old,new in [(2,4),(3,5),(4,6),(5,7)]:
             a,b=db.get(Item,old),db.get(Item,new)
             assert item_power(a.attack or a.defense,2)==(b.attack or b.defense)
+
+def test_login_rate_limit_does_not_limit_gameplay(player):
+    payload={'username':'tester','password':'wrongpassword'}
+    for _ in range(12):
+        assert player.post('/api/auth/login',json=payload).status_code==401
+    limited=player.post('/api/auth/login',json=payload)
+    assert limited.status_code==429 and limited.headers['Retry-After']=='60'
+    assert fight(player).status_code==200

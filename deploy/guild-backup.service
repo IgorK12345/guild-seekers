@@ -1,0 +1,10 @@
+[Unit]
+Description=Guild Seekers PostgreSQL backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /opt/guild-seekers/deploy/backup.sh
+User=root
+UMask=0077

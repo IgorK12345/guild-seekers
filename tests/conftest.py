@@ -25,6 +25,8 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture(autouse=True)
 def clean_database():
+    from backend.app.main import auth_attempts
+    auth_attempts.clear()
     assert engine.url.database.endswith('_test')
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
@@ -33,7 +35,7 @@ def clean_database():
 
 @pytest.fixture
 def client():
-    with TestClient(app) as client:
+    with TestClient(app,base_url='https://testserver') as client:
         yield client
 
 @pytest.fixture
